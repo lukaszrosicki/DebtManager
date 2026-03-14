@@ -1,0 +1,525 @@
+@model DebtManager.Models.DebtDashboardViewModel
+@using DebtManager.Models
+@{
+    ViewData["Title"] = "Zarządzanie Długami";
+    decimal sumaKapital = 0;
+    decimal sumaOdsetki = 0;
+    decimal sumaRazem = 0;
+}
+
+<div class="container-fluid">
+    <h2 class="mb-4">Moduł Długów</h2>
+    
+    @if(TempData["Message"] != null) { <div class="alert alert-success">@TempData["Message"]</div> }
+    @if(TempData["Error"] != null) { <div class="alert alert-danger">@TempData["Error"]</div> }
+
+    <div class="row">
+        <!-- LEWA KOLUMNA: LISTA DŁUGÓW -->
+        <div class="col-md-3">
+            <div class="card shadow-sm mb-3 border-0">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <h6 class="m-0 text-dark fw-bold text-uppercase small">Długi</h6>
+                        <div class="form-check m-0" title="Zaznacz wszystko">
+                            <input class="form-check-input" type="checkbox" id="selectAllDebts" onchange="toggleAll(this)">
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-danger py-0" onclick="submitBulkDelete()" title="Usuń zaznaczone"><i class="bi bi-trash"></i></button>
+                        <a href="/calculator" class="btn btn-sm btn-outline-dark py-0" title="Nowy dług"><i class="bi bi-plus-lg"></i></a>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-link text-secondary py-0" type="button" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                <li><a class="dropdown-item small" asp-action="ExportCsv"><i class="bi bi-download me-2"></i>Eksportuj CSV</a></li>
+                                <li><button class="dropdown-item small" type="button" data-bs-toggle="modal" data-bs-target="#importDebtsModal"><i class="bi bi-upload me-2"></i>Importuj CSV</button></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="list-group list-group-flush border-top">
+                    <form id="bulkDeleteForm" asp-action="BulkDelete" method="post">
+                    @foreach (var d in Model.ListaDlugow)
+                    {
+                        <div class="list-group-item list-group-item-action p-0 @(Model.WybranyDlug?.Id == d.Id ? "bg-light" : "")">
+                            <div class="d-flex align-items-center py-2 px-3 hover-bg">
+                                <div style="width: 25px;">
+                                    <input type="checkbox" name="ids" value="@d.Id" class="form-check-input item-checkbox" onclick="handleCheckboxClick(event, this)" />
+                                </div>
+                                <a href="/calculator?id=@d.Id" class="text-decoration-none text-dark flex-grow-1 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-bold small">@d.Nazwa <span class="text-muted fw-normal ms-1">#@d.Id</span></div>
+                                        <div class="text-muted" style="font-size: 0.75em;">Rat: @d.LiczbaRat | @d.Oprocentowanie%</div>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold small">@d.WartoscPoczatkowa.ToString("N0") @d.Currency</div>
+                                    @if(d.Currency != "PLN")
+                                    {
+                                            <div class="text-muted" style="font-size: 0.65em;">(@((d.WartoscPoczatkowa * d.ExchangeRate).ToString("N0")) PLN)</div>
+                                    }
+                                    </div>
+                                </a>
+                            </div>
+                        </div>
+                    }
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- PRAWA KOLUMNA: KONFIGURACJA I EDYCJA -->
+        <div class="col-md-9">
+
+            <!-- 1. KONFIGURATOR -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white" data-bs-toggle="collapse" data-bs-target="#configCollapse" style="cursor: pointer;">
+                    1. Konfiguracja Długu @(Model.WybranyDlug != null && !Model.CzySymulacja ? $"- {Model.WybranyDlug.Nazwa}" : "(Nowy / Symulacja)")
+                </div>
+                <div class="collapse @(Model.WybranyDlug == null ? "show" : "")" id="configCollapse">
+                    <div class="card-body">
+                        <form asp-action="ZapiszDlug" method="post">
+                            <input type="hidden" asp-for="KonfiguracjaDlugu.Id" />
+                            <div class="row">
+                                <div class="col-md-4 mb-2">
+                                    <label>Nazwa długu</label>
+                                    <input asp-for="KonfiguracjaDlugu.Nazwa" class="form-control" />
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Wartość (Kapitał)</label>
+                                    <input asp-for="KonfiguracjaDlugu.WartoscPoczatkowa" class="form-control" type="number" step="0.01" />
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Oprocentowanie (%)</label>
+                                    <input asp-for="KonfiguracjaDlugu.Oprocentowanie" class="form-control" type="number" step="0.01" />
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Data 1. raty</label>
+                                    <input asp-for="KonfiguracjaDlugu.DataPierwszejRaty" class="form-control" type="date" />
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Liczba rat</label>
+                                    <input asp-for="KonfiguracjaDlugu.LiczbaRat" class="form-control" type="number" />
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Typ rat</label>
+                                    <select asp-for="KonfiguracjaDlugu.TypRat" asp-items="Html.GetEnumSelectList<DebtManager.Models.TypRat>()" class="form-control"></select>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label>Waluta</label>
+                                    <select asp-for="KonfiguracjaDlugu.Currency" class="form-select">
+                                        <option value="PLN">PLN</option>
+                                        <option value="USD">USD</option>
+                                        <option value="EUR">EUR</option>
+                                        <option value="GBP">GBP</option>
+                                        <option value="CHF">CHF</option>
+                                        <option value="NOK">NOK</option>
+                                        <option value="SEK">SEK</option>
+                                        <option value="DKK">DKK</option>
+                                        <option value="CZK">CZK</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" name="action" value="symuluj" class="btn btn-info mt-3 text-white">Symuluj (tylko podgląd)</button>
+                            <button type="submit" name="action" value="zapisz" class="btn btn-success mt-3 ms-2">Zapisz Dług</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            @if (Model.WybranyDlug != null)
+            {
+                <!-- 2. OŚ CZASU (EDYTOR RAT) -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                        <span>
+                            2. Harmonogram Spłat 
+                        </span>
+                        <div>
+                            <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#modalNadplata">+ Nadpłata</button>
+                            <button class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#modalOprocentowanie">+ Zmiana %</button>
+                            <div class="btn-group btn-group-sm ms-2">
+                                <a asp-action="ExportInstallmentsCsv" asp-route-debtId="@Model.WybranyDlug?.Id" class="btn btn-outline-light" title="Eksportuj harmonogram"><i class="bi bi-download"></i></a>
+                                <button type="button" class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#modalImportInstallments" title="Importuj harmonogram"><i class="bi bi-upload"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Opis</th>
+                                    <th class="text-end">Kapitał</th>
+                                    <th class="text-end">Odsetki</th>
+                                    <th class="text-end">Razem</th>
+                                    <th class="text-end">Pozostało</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model.OsCzasu)
+                                {
+                                    if (item.TypWiersza == "Rata" && item.Rata != null)
+                                    {
+                                        // Sumowanie
+                                        sumaKapital += item.Rata.Kapital;
+                                        sumaOdsetki += item.Rata.Odsetki;
+                                        sumaRazem += item.Rata.Calkowita;
+
+                                        // --- WIERSZ RATY ---
+                                        if (Model.EdytowanaRataId == item.Rata.Id)
+                                        {
+                                            // TRYB EDYCJI RATY
+                                            <tr class="table-primary border-3 border-primary">
+                                                <td colspan="8" class="p-2">
+                                                    <div class="row g-2">
+                                                        <!-- Formularz Edycji Planu -->
+                                                        <div class="col-12">
+                                                            <h6 class="small text-muted mb-2">Edycja Planu</h6>
+                                                            <form asp-action="EdytujRate" method="post" class="row g-1 align-items-center">
+                                                                <input type="hidden" name="rataId" value="@item.Rata.Id" />
+                                                                <div class="col-auto"><span class="badge bg-secondary">#@item.Rata.NumerRaty</span></div>
+                                                                <div class="col"><input name="kapital" value="@item.Rata.Kapital.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm" placeholder="Kapitał" /></div>
+                                                                <div class="col"><input name="odsetki" value="@item.Rata.Odsetki.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm" placeholder="Odsetki" /></div>
+                                                                <div class="col-auto">
+                                                                    <div class="form-check form-switch" title="Przelicz harmonogram">
+                                                                        <input class="form-check-input" type="checkbox" name="przelicz" value="true" checked>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-auto"><button type="submit" class="btn btn-sm btn-primary">Zapisz</button></div>
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            // TRYB WYŚWIETLANIA RATY
+                                            <tr class="@(item.Rata.CzyEdytowanaRecznie ? "table-warning" : "")">
+                                                <td>@item.Data.ToShortDateString()</td>
+                                                <td class="position-relative">
+                                                    Rata #@item.Rata.NumerRaty
+                                                    @if(item.Rata.CzyEdytowanaRecznie) { <i class="small text-muted">(ręczna)</i> }
+                                                </td>
+                                                <td class="text-end">@item.Rata.Kapital.ToString("N2")</td>
+                                                <td class="text-end">@item.Rata.Odsetki.ToString("N2")</td>
+                                                <td class="text-end fw-bold">
+                                                    @item.Rata.Calkowita.ToString("N2")
+                                                </td>
+                                                <td class="text-end text-muted">@item.Rata.PozostaloKapitalu.ToString("N2")</td>
+                                                <td class="text-center">
+                                                    @if(item.Rata.CzyOplacona) 
+                                                    { <span class="badge text-bg-success">Opłacona</span> }
+                                                    else 
+                                                    { <span class="badge bg-secondary">Planowana</span> }
+                                                </td>
+                                                <td class="text-center">
+                                                    @if(!Model.CzySymulacja && !item.Rata.CzyOplacona)
+                                                    {
+                                                        <a href="/calculator?id=@Model.WybranyDlug.Id&editRataId=@item.Rata.Id" class="btn btn-sm btn-outline-primary py-0">✎</a>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                    else if (item.TypWiersza == "Nadplata" && item.Nadplata != null)
+                                    {
+                                        // Sumowanie nadpłat
+                                        sumaKapital += (item.Nadplata.Kwota); // Nadpłata to w większości kapitał, ale sumujmy co wydane
+                                        sumaOdsetki += item.Nadplata.CzescOdsetkowa;
+                                        sumaRazem += item.Nadplata.Kwota;
+
+                                        // --- WIERSZ NADPŁATY ---
+                                        if (Model.EdytowanaNadplataId == item.Nadplata.Id)
+                                        {
+                                            <tr class="table-success border-3 border-success">
+                                                <td colspan="8" class="p-2">
+                                                    <form asp-action="EdytujNadplate" method="post" class="row g-1 align-items-center">
+                                                        <input type="hidden" name="Id" value="@item.Nadplata.Id" />
+                                                        <div class="col-auto"><span class="badge bg-success">NAD</span></div>
+                                                        <div class="col-2"><input name="Data" type="date" value="@item.Nadplata.Data.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                                                        <div class="col-2"><input name="kapital" type="number" step="0.01" value="@((item.Nadplata.Kwota - item.Nadplata.CzescOdsetkowa).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control form-control-sm" placeholder="Kapitał" title="Spłacony Kapitał" /></div>
+                                                        <div class="col-2"><input name="odsetki" type="number" step="0.01" value="@item.Nadplata.CzescOdsetkowa.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm" placeholder="Odsetki" title="Pobrane Odsetki" /></div>
+                                                        <div class="col-2"><select name="Typ" asp-for="@item.Nadplata.Typ" asp-items="Html.GetEnumSelectList<DebtManager.Models.TypNadplaty>()" class="form-select form-select-sm"></select></div>
+                                                        <div class="col-2"><select name="Efekt" asp-for="@item.Nadplata.Efekt" asp-items="Html.GetEnumSelectList<DebtManager.Models.EfektNadplaty>()" class="form-select form-select-sm"></select></div>
+                                                        <div class="col-auto"><button type="submit" class="btn btn-sm btn-success">OK</button></div>
+                                                        <div class="col-auto"><a href="/calculator?id=@Model.WybranyDlug.Id" class="btn btn-sm btn-secondary">X</a></div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        }
+                                        else {
+                                        <tr class="table-success">
+                                            <td>@item.Data.ToShortDateString()</td>
+                                            <td colspan="4" class="fw-bold">
+                                                <span class="badge bg-success me-2">REAL</span>
+                                                @item.Nadplata.Kwota.ToString("C2") 
+                                                <small class="text-dark fw-normal ms-2">
+                                                    (Kapitał: @((item.Nadplata.Kwota - item.Nadplata.CzescOdsetkowa).ToString("N2")), 
+                                                     Odsetki: @item.Nadplata.CzescOdsetkowa.ToString("N2"))
+                                                </small>
+                                                <small class="text-muted fst-italic ms-1">- @item.Nadplata.Efekt</small>
+                                            </td>
+                                            <td colspan="2"></td>
+                                            <td class="text-center">
+                                                <a href="/calculator?id=@Model.WybranyDlug.Id&editNadplataId=@item.Nadplata.Id" class="btn btn-sm btn-link text-dark py-0">✎</a>
+                                                <form asp-action="UsunZdarzenie" method="post" onsubmit="return confirm('Usunąć?')">
+                                                    <input type="hidden" name="id" value="@item.Nadplata.Id" />
+                                                    <input type="hidden" name="typ" value="nadplata" />
+                                                    <button class="btn btn-sm btn-link text-danger py-0">X</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        }
+                                    }
+                                    else if (item.TypWiersza == "ZmianaOprocentowania" && item.ZmianaOprocentowania != null)
+                                    {
+                                        // --- WIERSZ ZMIANY % ---
+                                        if (Model.EdytowanaZmianaId == item.ZmianaOprocentowania.Id)
+                                        {
+                                            <tr class="table-info border-3 border-info">
+                                                <td colspan="8" class="p-2">
+                                                    <form asp-action="EdytujZmiane" method="post" class="row g-1 align-items-center">
+                                                        <input type="hidden" name="Id" value="@item.ZmianaOprocentowania.Id" />
+                                                        <div class="col-auto"><span class="badge bg-info text-dark">%</span></div>
+                                                        <div class="col-3"><input name="DataZmiany" type="date" value="@item.ZmianaOprocentowania.DataZmiany.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+                                                        <div class="col-3"><input name="NoweOprocentowanie" type="number" step="0.01" value="@item.ZmianaOprocentowania.NoweOprocentowanie.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm" placeholder="%" /></div>
+                                                        <div class="col-auto"><button type="submit" class="btn btn-sm btn-primary">OK</button></div>
+                                                    </form>
+                                                </td>
+                                            </tr>
+                                        } else {
+                                        <tr class="table-info">
+                                            <td>@item.Data.ToShortDateString()</td>
+                                            <td colspan="6" class="text-info fw-bold">
+                                                <span class="badge bg-info text-dark me-2">%</span>
+                                                Nowe oprocentowanie: @item.ZmianaOprocentowania.NoweOprocentowanie %
+                                            </td>
+                                            <td class="text-center">
+                                                <a href="/calculator?id=@Model.WybranyDlug.Id&editZmianaId=@item.ZmianaOprocentowania.Id" class="btn btn-sm btn-link text-dark py-0">✎</a>
+                                                <form asp-action="UsunZdarzenie" method="post" onsubmit="return confirm('Usunąć?')">
+                                                    <input type="hidden" name="id" value="@item.ZmianaOprocentowania.Id" />
+                                                    <input type="hidden" name="typ" value="zmiana" />
+                                                    <button class="btn btn-sm btn-link text-danger py-0">X</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                        }
+                                    }
+                                }
+                            </tbody>
+                            <tfoot class="table-dark sticky-bottom">
+                                <tr>
+                                    <td colspan="2" class="text-end fw-bold">SUMA:</td>
+                                    <td class="text-end fw-bold">@sumaKapital.ToString("N2")</td>
+                                    <td class="text-end fw-bold">@sumaOdsetki.ToString("N2")</td>
+                                    <td class="text-end fw-bold">@sumaRazem.ToString("N2")</td>
+                                    <td colspan="3"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- MODAL IMPORT INSTALLMENTS -->
+<div class="modal fade" id="modalImportInstallments" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ImportInstallmentsCsv" method="post" enctype="multipart/form-data">
+                <input type="hidden" name="debtId" value="@Model.WybranyDlug?.Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Importuj Harmonogram (CSV)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Format CSV (zgodny z eksportem): Data;Typ;KwotaCalkowita;Kapital;Odsetki;NoweOprocentowanie;EfektNadplaty;NumerRaty;CzyOplacona;TypNadplaty<br/>Stary format: NumerRaty;DataRaty;Kapital;Odsetki;CzyOplacona(0/1)</p>
+                    <input type="file" name="file" class="form-control" accept=".csv" required />
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Importuj</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL IMPORT DEBTS -->
+<div class="modal fade" id="importDebtsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="ImportCsv" method="post" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title">Importuj Długi z CSV</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted">Plik CSV powinien zawierać kolumny: Id;Nazwa;WartoscPoczatkowa;Oprocentowanie;LiczbaRat;DataPierwszejRaty;TypRat;Currency;ExchangeRate</p>
+                    <input type="file" name="file" class="form-control" accept=".csv" required />
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary">Importuj</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .hover-bg:hover { background-color: #f8f9fa; }
+</style>
+
+<script>
+    // --- CHECKBOX LOGIC ---
+    let lastChecked = null;
+
+    function handleCheckboxClick(e, checkbox) {
+        if (e.shiftKey && lastChecked) {
+            let checkboxes = Array.from(document.querySelectorAll('.item-checkbox'));
+            let start = checkboxes.indexOf(lastChecked);
+            let end = checkboxes.indexOf(checkbox);
+            let range = checkboxes.slice(Math.min(start, end), Math.max(start, end) + 1);
+            range.forEach(cb => cb.checked = checkbox.checked);
+        }
+        lastChecked = checkbox;
+    }
+
+    function toggleAll(source) {
+        document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = source.checked);
+    }
+
+    function submitBulkDelete() {
+        if (confirm('Czy na pewno usunąć zaznaczone długi?')) {
+            document.getElementById('bulkDeleteForm').submit();
+        }
+    }
+</script>
+
+<!-- MODAL NADPŁATA -->
+<div class="modal fade" id="modalNadplata" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="DodajNadplate" method="post">
+                <input type="hidden" name="dlugId" value="@Model.WybranyDlug?.Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Dodaj Nadpłatę</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <label>Data</label>
+                        <input name="data" type="date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="mb-2">
+                        <label>Kwota</label>
+                        <input name="kwota" type="number" step="0.01" class="form-control" />
+                    </div>
+                    <div class="mb-2">
+                        <label>Typ</label>
+                        <select name="typ" asp-items="Html.GetEnumSelectList<DebtManager.Models.TypNadplaty>()" class="form-control" id="nadplataTypSelect" onchange="toggleNadplataReczna()"></select>
+                    </div>
+                    <div class="mb-2" id="nadplataOdsetkiDiv" style="display:none;">
+                        <label>Część odsetkowa</label>
+                        <input name="czescOdsetkowa" type="number" step="0.01" class="form-control" value="0.00" />
+                        <small class="text-muted">Podaj kwotę pobraną na poczet odsetek</small>
+                    </div>
+                    <div class="mb-2">
+                        <label>Efekt</label>
+                        <select name="efekt" asp-items="Html.GetEnumSelectList<DebtManager.Models.EfektNadplaty>()" class="form-control"></select>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-primary">Dodaj</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL ZMIANA % -->
+<div class="modal fade" id="modalOprocentowanie" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="DodajZmianeOprocentowania" method="post">
+                <input type="hidden" name="DlugId" value="@Model.WybranyDlug?.Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title">Zmiana Oprocentowania</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-2"><label>Data zmiany</label><input name="DataZmiany" type="date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" /></div>
+                    <div class="mb-2"><label>Nowe oprocentowanie (%)</label><input name="NoweOprocentowanie" type="number" step="0.01" class="form-control" /></div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-primary">Zapisz</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL KALKULATOR -->
+<div class="modal fade" id="modalKalkulator" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="GenerujSymulacje" method="post">
+                <input type="hidden" name="dlugId" value="@Model.WybranyDlug?.Id" />
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Kalkulator Nadpłat (Symulacja)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small">
+                        Ta opcja wygeneruje serię planowanych nadpłat. 
+                        Istniejące zaplanowane nadpłaty zostaną usunięte.
+                    </div>
+                    <div class="mb-3">
+                        <label>Miesięczna kwota nadpłaty</label>
+                        <input name="kwotaMiesieczna" type="number" step="0.01" class="form-control" placeholder="0.00" />
+                    </div>
+                    <div class="mb-3 form-check">
+                        <input name="stalaRataLaczna" type="checkbox" class="form-check-input" id="chkSmart" />
+                        <label class="form-check-label" for="chkSmart">Stała rata łączna (efekt kuli śnieżnej)</label>
+                        <div class="form-text small">Nadpłata będzie rosła o tyle, o ile spadnie rata bankowa, utrzymując stałe obciążenie budżetu.</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6"><label>Od kiedy</label><input name="dataStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control" /></div>
+                        <div class="col-6"><label>Do kiedy (opcjonalnie)</label><input name="dataKoniec" type="date" class="form-control" /></div>
+                    </div>
+                </div>
+                <div class="modal-footer"><button class="btn btn-warning">Generuj Symulację</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+@if (ViewBag.ShowOverpaymentModal == true && Model.WybranyDlug != null)
+{
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var myModal = new bootstrap.Modal(document.getElementById('modalNadplata'));
+            myModal.show();
+        });
+    </script>
+}
+<script>
+    function toggleNadplataReczna() {
+        var select = document.getElementById('nadplataTypSelect');
+        var div = document.getElementById('nadplataOdsetkiDiv');
+        if (select && div) {
+            if (select.value === '2') { // 2 = Reczna
+                div.style.display = 'block';
+            } else {
+                div.style.display = 'none';
+            }
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        var nadpModal = document.getElementById('modalNadplata');
+        if (nadpModal) {
+            nadpModal.addEventListener('show.bs.modal', function () {
+                toggleNadplataReczna();
+            });
+        }
+    });
+    </script>
