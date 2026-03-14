@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DebtManager")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d9d658520918caac7c8b281fe7bd2d0a530d463c")]
 [assembly: System.Reflection.AssemblyProductAttribute("DebtManager")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DebtManager")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

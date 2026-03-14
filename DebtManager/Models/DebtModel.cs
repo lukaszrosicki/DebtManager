@@ -88,6 +88,8 @@ namespace DebtManager.Models
     {
         public int Id { get; set; }
         public int DlugId { get; set; }
+        public virtual Dlug Dlug { get; set; } = default!;
+
         public DateTime Data { get; set; }
         public decimal Kwota { get; set; }
         public TypNadplaty Typ { get; set; }
@@ -103,6 +105,8 @@ namespace DebtManager.Models
     {
         public int Id { get; set; }
         public int DlugId { get; set; }
+        public virtual Dlug Dlug { get; set; } = default!;
+
         public DateTime DataZmiany { get; set; }
         public decimal NoweOprocentowanie { get; set; }
     }

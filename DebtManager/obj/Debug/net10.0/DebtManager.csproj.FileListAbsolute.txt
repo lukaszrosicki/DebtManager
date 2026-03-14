@@ -212,3 +212,4 @@ C:\Users\rosic\OneDrive\Repozytorium\DebtManager\DebtManager\obj\Debug\net10.0\r
 C:\Users\rosic\OneDrive\Repozytorium\DebtManager\DebtManager\obj\Debug\net10.0\DebtManager.pdb
 C:\Users\rosic\OneDrive\Repozytorium\DebtManager\DebtManager\obj\Debug\net10.0\DebtManager.genruntimeconfig.cache
 C:\Users\rosic\OneDrive\Repozytorium\DebtManager\DebtManager\obj\Debug\net10.0\ref\DebtManager.dll
+C:\Users\rosic\OneDrive\Repozytorium\DebtManager\DebtManager\obj\Debug\net10.0\DebtManager.sourcelink.json

@@ -249,6 +249,8 @@ namespace DebtManager.Controllers
         [HttpPost("dodaj-nadplate")]
         public async Task<IActionResult> DodajNadplate(int dlugId, DateTime data, string kwota, string kapital, string czescOdsetkowa, TypNadplaty typ, EfektNadplaty efekt)
         {
+            if (dlugId == 0) return RedirectToAction(nameof(Index));
+
             decimal kwotaVal = ParseDecimal(kwota);
             decimal kapVal = ParseDecimal(kapital);
             decimal odsetkiVal = ParseDecimal(czescOdsetkowa);
@@ -271,6 +273,8 @@ namespace DebtManager.Controllers
         [HttpPost("dodaj-zmiane-oprocentowania")]
         public async Task<IActionResult> DodajZmianeOprocentowania(int DlugId, DateTime DataZmiany, string NoweOprocentowanie)
         {
+            if (DlugId == 0) return RedirectToAction(nameof(Index));
+
             decimal val = ParseDecimal(NoweOprocentowanie);
             var zmiana = new ZmianaOprocentowania { DlugId = DlugId, DataZmiany = DataZmiany, NoweOprocentowanie = val };
             _context.ZmianyOprocentowania.Add(zmiana);
